@@ -1,0 +1,13 @@
+#!/bin/bash
+
+wget -q https://app.drakon.tech/gen/VFQOl8OYWRkw1j8aAvLpftgNP3sCBne0/common_mod.js
+wget -q https://app.drakon.tech/gen/VFQOl8OYWRkw1j8aAvLpftgNP3sCBne0/html_mod.js
+wget -q https://app.drakon.tech/gen/VFQOl8OYWRkw1j8aAvLpftgNP3sCBne0/sm_mod.js
+wget -q https://app.drakon.tech/gen/VFQOl8OYWRkw1j8aAvLpftgNP3sCBne0/pyramid_mod.js
+wget -q https://app.drakon.tech/gen/3Ie8QKgWQaHrdEccI2MxoMcDHYs2wxMb/palach_mod.js
+wget -q https://app.drakon.tech/gen/3Ie8QKgWQaHrdEccI2MxoMcDHYs2wxMb/palach_main.js
+
+echo downloaded
+
+mv *.js src/assets/js
+
