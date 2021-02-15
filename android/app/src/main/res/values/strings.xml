@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">palach</string>
-    <string name="title_activity_main">palach</string>
-    <string name="package_name">io.ionic.starter</string>
-    <string name="custom_url_scheme">io.ionic.starter</string>
+    <string name="app_name">Палач</string>
+    <string name="title_activity_main">Палач</string>
+    <string name="package_name">info.way4.palach</string>
+    <string name="custom_url_scheme">info.way4.palach</string>
 </resources>

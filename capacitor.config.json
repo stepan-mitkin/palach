@@ -1,6 +1,6 @@
 {
-  "appId": "io.ionic.starter",
-  "appName": "palach",
+  "appId": "info.4way.palach",
+  "appName": "Палач",
   "bundledWebRuntime": false,
   "npmClient": "npm",
   "webDir": "www",
