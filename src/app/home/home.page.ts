@@ -25,7 +25,9 @@ export class HomePage {
     var storage = palach_main(common)
     var config = {
       logo: "/assets/images/enneagram.png",
-      distract: "/assets/sounds/button-10.mp3"
+      distract: "/assets/sounds/button-10.mp3",
+      trash: "/assets/images/trash.png",
+      report: "/assets/images/report.png"
     }
     var palach = palach_mod(common, sm, html, storage, config)
     var tree = palach.buildTree()

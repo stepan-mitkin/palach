@@ -30,11 +30,7 @@ function App_run(self) {
                 module.sound = new Audio(config.distract)
                 initStyles()
                 self.screen = setUpScreen()
-                sm.sendMessage(
-                    self,
-                    "onEvent",
-                    {type: "main-menu"}
-                )
+                sendEvent(self, {type: "main-menu"})
                 self.state = "8";
                 break;
             case "8":
@@ -75,13 +71,7 @@ function App_run(self) {
                                     self.state = "8";
                                 } else {
                                     if (self._sw_12 === "practices") {
-                                        self.allReports = storage.getAllReports()
-                                        self.allReports.reverse()
-                                        sendShow(
-                                            self,
-                                            self.reports,
-                                            self.allReports
-                                        )
+                                        sendShow(self, self.reports, {})
                                         self.state = "8";
                                     } else {
                                         if (self._sw_12 === "total-stats") {
@@ -180,15 +170,14 @@ function Practice_run(self) {
                 self._sw_32 = self.msg.type;
                 if (self._sw_32 === "start") {
                     self.start = getNow()
-                    self.object = self.msg.object
+                    self.object = getSelectObject()
                     self.distractions = []
                     showConcentrate(self)
                     self.state = "24";
                 } else {
                     if (self._sw_32 === "cancel") {
-                        sm.sendMessage(
+                        sendEvent(
                             self.parent,
-                            "onEvent",
                             {type: "main-menu"}
                         )
                         self.state = "10";
@@ -222,9 +211,8 @@ function Practice_run(self) {
                     distractions: self.distractions.slice(),
                     end: self.end
                 }
-                sm.sendMessage(
-                    self.parent,
-                    "onEvent",
+                sendEvent(
+                    self.channels.app,
                     {
                         type: "practice-completed",
                         report: self.report
@@ -247,11 +235,95 @@ function Practice(parent) {
     return self;
 }
 
+function PracticeList_onEvent(self, data) {
+    switch (self.state) {
+        case "4_wait":
+            self.msg = data;
+            self.state = "5";
+            break;
+        case "11_wait":
+            self.msg = data;
+            self.state = "17";
+            break;
+        default:
+            return;
+    }
+    PracticeList_run(self);
+}
+
+function PracticeList_onChildCompleted(self, data) {
+    switch (self.state) {
+        case "19_wait":
+            self.remove = data;
+            self.state = "20";
+            break;
+        default:
+            return;
+    }
+    PracticeList_run(self);
+}
+
+function PracticeList_run(self) {
+    var work = true;
+    while (work) {
+        switch (self.state) {
+            case "6":
+                self.state = "4_wait";
+                work = false;
+                break;
+            case "5":
+                if (self.msg.type === "show") {
+                    self.container = self.msg.container
+                    buildPracticeList(self)
+                    self.state = "11";
+                } else {
+                    self.state = "6";
+                }
+                break;
+            case "11":
+                self.state = "11_wait";
+                work = false;
+                break;
+            case "17":
+                if (self.msg.type === "remove") {
+                    self.message = "Удалить отчёт " + formatDate(
+                        self.msg.report.start
+                    ) + "?"
+                    self.state = "19_wait";
+                    work = false;
+                    var machine = showYesNo(self, self.message, 'Удалить', 'Отмена');
+                    machine.run();
+                } else {
+                    sendEvent(self.parent, self.msg)
+                    self.state = "6";
+                }
+                break;
+            case "20":
+                if (self.remove) {
+                    storage.removeReport(
+                        self.msg.report.start
+                    )
+                    html.clear(self.container)
+                    buildPracticeList(self)
+                    self.state = "11";
+                } else {
+                    self.state = "11";
+                }
+                break;
+            default:
+                return;
+        }
+    }
+}
+
 function PracticeList(parent) {
-    return SimpleScreen(
-        parent,
-        buildPracticeList
-    )
+    var self = sm.createMachine("PracticeList");
+    sm.addMethod(self, "onEvent", PracticeList_onEvent);
+    sm.addMethod(self, "onChildCompleted", PracticeList_onChildCompleted);
+    sm.addChild(parent, self);
+    sm.addMethod(self, "run", PracticeList_run);
+    self.state = "6";
+    return self;
 }
 
 function PracticeReport(parent) {
@@ -300,11 +372,7 @@ function SimpleScreen_run(self) {
                 work = false;
                 break;
             case "12":
-                sm.sendMessage(
-                    self.parent,
-                    "onEvent",
-                    self.msg
-                )
+                sendEvent(self.parent, self.msg)
                 self.state = "6";
                 break;
             default:
@@ -395,58 +463,74 @@ function addRadio(parent, name, text, checked) {
 }
 
 function addReportLine(self, report) {
-    var date, line, msg;
+    var date, icon, label, line, msg, open, remove, trash;
     msg = {type: "report", report: report}
+    open = function () {
+        self.onEvent(msg)
+    }
+    remove = function () {
+        self.onEvent(
+            {type: "remove", report: report}
+        )
+    }
     date = formatDate(report.start)
-    line = html.addTag(
+    line = html.make(
         self.container,
         "div",
-        date,
         "report-line"
     )
+    icon = createIcon(line, config.report)
+    label = html.make(line, "div")
+    label.style.display = "inline-block"
+    label.style.width = "calc(100% - 80px)"
+    label.style.height = "40px"
+    label.style.lineHeight = "40px"
+    html.setText(label, date)
+    trash = createIcon(line, config.trash)
+    trash.className = "back-red"
     html.addEventListener(
-        line,
+        icon,
         "click",
-        function () {
-            self.onEvent(msg)
-        }
+        open
+    )
+    html.addEventListener(
+        label,
+        "click",
+        open
+    )
+    html.addEventListener(
+        trash,
+        "click",
+        remove
     )
 }
 
 function buildHelp(self) {
-    var header, headerDiv, list, practice;
+    var list, view;
     function branch1() {
-        html.clear(self.container)
-        headerDiv = html.make(
+        view = html.make(
             self.container,
-            "div"
-        )
-        headerDiv.style.whiteSpace = "nowrap"
-        headerDiv.style.padding = "20px"
-        headerDiv.style.paddingTop = "40px"
-        header = html.addTag(
-            headerDiv,
             "div",
-            "Как играть"
+            "view"
         )
-        header.style.fontSize = "20px"
-        header.style.fontWeight = "bold"
-        practice = createButton(
-            self.container,
+        createHeader(view, "Как играть")
+        createScreenButton(
+            self,
+            view,
             "В начало",
-            makeSend(self, {type: "main-menu"})
+            "main-menu",
+            true
         )
-        practice.style.background = "#F39C12"
         return branch2();
     }
 
     function branch2() {
         html.addTag(
-            self.container,
+            view,
             "p",
             "\"Палач\" — упражнение на укрепление внимания и улучшение концентрации."
         )
-        list = html.make(self.container, "ul")
+        list = html.make(view, "ul")
         html.addTag(
             list,
             "li",
@@ -455,7 +539,7 @@ function buildHelp(self) {
         html.addTag(
             list,
             "li",
-            "Как только заметите, что отвлеклись, нажмите на жёлтую часть экрана."
+            "Как только заметите, что отвлеклись, нажмите на центральную область экрана."
         )
         html.addTag(
             list,
@@ -477,8 +561,7 @@ function buildHelp(self) {
 }
 
 function buildMainMenu(self) {
-    var header, headerDiv, img, practice, site;
-    html.clear(self.container)
+    var header, headerDiv, img, link, site, view;
     headerDiv = html.make(
         self.container,
         "div"
@@ -486,7 +569,9 @@ function buildMainMenu(self) {
     headerDiv.style.whiteSpace = "nowrap"
     headerDiv.style.padding = "20px"
     headerDiv.style.paddingTop = "40px"
-    img = html.make(headerDiv, "img")
+    link = html.make(headerDiv, "a")
+    link.href = "/"
+    img = html.make(link, "img")
     img.src = config.logo
     img.width = 40
     img.height = 40
@@ -500,30 +585,34 @@ function buildMainMenu(self) {
     header.style.fontWeight = "bold"
     header.style.display = "inline-block"
     header.style.paddingLeft = "20px"
-    practice = createButton(
+    view = html.make(
         self.container,
+        "div",
+        "view"
+    )
+    createScreenButton(
+        self,
+        view,
         "Практика",
-        makeSend(
-            self,
-            {type: "practice"}
-        )
+        "practice",
+        true
     )
-    practice.style.background = "#F39C12"
-    createButton(
-        self.container,
+    createScreenButton(
+        self,
+        view,
         "Журнал",
-        makeSend(
-            self,
-            {type: "practices"}
-        )
+        "practices",
+        false
     )
-    createButton(
-        self.container,
+    createScreenButton(
+        self,
+        view,
         "Как играть",
-        makeSend(self, {type: "help"})
+        "help",
+        false
     )
     site = html.addTag(
-        self.container,
+        view,
         "div",
         "4way.info"
     )
@@ -536,35 +625,29 @@ function buildMainMenu(self) {
 }
 
 function buildPracticeList(self) {
-    var _12_col, _12_it, _12_length, header, headerDiv, practice, report;
+    var _12_col, _12_it, _12_length, allReports, report, view;
     function branch1() {
-        html.clear(self.container)
-        headerDiv = html.make(
+        view = html.make(
             self.container,
-            "div"
-        )
-        headerDiv.style.whiteSpace = "nowrap"
-        headerDiv.style.padding = "20px"
-        headerDiv.style.paddingTop = "40px"
-        header = html.addTag(
-            headerDiv,
             "div",
-            "Журнал"
+            "view"
         )
-        header.style.fontSize = "20px"
-        header.style.fontWeight = "bold"
-        practice = createButton(
-            self.container,
+        createHeader(view, "Журнал")
+        createScreenButton(
+            self,
+            view,
             "В начало",
-            makeSend(self, {type: "main-menu"})
+            "main-menu",
+            true
         )
-        practice.style.background = "#F39C12"
         return branch2();
     }
 
     function branch2() {
+        allReports = storage.getAllReports()
+        allReports.reverse()
         _12_it = 0;
-        _12_col = self.data;
+        _12_col = allReports;
         _12_length = _12_col.length;
         while (true) {
             if (_12_it < _12_length) {
@@ -585,35 +668,29 @@ function buildPracticeList(self) {
 }
 
 function buildPracticeReport(self) {
-    var average, date, end, header, headerDiv, practice, start;
+    var average, date, end, start, view;
     function branch1() {
-        html.clear(self.container)
-        headerDiv = html.make(
+        view = html.make(
             self.container,
-            "div"
-        )
-        headerDiv.style.whiteSpace = "nowrap"
-        headerDiv.style.padding = "20px"
-        headerDiv.style.paddingTop = "40px"
-        date = formatDate(self.data.start)
-        header = html.addTag(
-            headerDiv,
             "div",
-            "Отчёт по практике"
+            "view"
         )
-        header.style.fontSize = "20px"
-        header.style.fontWeight = "bold"
-        html.addTag(self.container, "p", date)
-        practice = createButton(
-            self.container,
+        createHeader(view, "Отчёт по практике")
+        date = formatDate(self.data.start)
+        html.addTag(view, "p", date)
+        createScreenButton(
+            self,
+            view,
             "В начало",
-            makeSend(self, {type: "main-menu"})
+            "main-menu",
+            true
         )
-        practice.style.background = "#F39C12"
-        createButton(
-            self.container,
+        createScreenButton(
+            self,
+            view,
             "Журнал",
-            makeSend(self, {type: "practices"})
+            "practices",
+            false
         )
         return branch2();
     }
@@ -622,27 +699,22 @@ function buildPracticeReport(self) {
         start = new Date(self.data.start)
         end = new Date(self.data.end)
         addNameValue(
-            self.container,
+            view,
             "Начало",
             formatDate(self.data.start)
         )
         addNameValue(
-            self.container,
-            "Конец",
-            formatDate(self.data.end)
-        )
-        addNameValue(
-            self.container,
+            view,
             "Предмет",
             self.data.object
         )
         addNameValue(
-            self.container,
+            view,
             "Время концентрации",
             formatSpan(start, end)
         )
         addNameValue(
-            self.container,
+            view,
             "Отвлечения",
             self.data.distractions.length.toString()
         )
@@ -652,7 +724,7 @@ function buildPracticeReport(self) {
             )
         ) / 1000
         addNameValue(
-            self.container,
+            view,
             "Среднее время удержания",
             average.toFixed(2) + " сек."
         )
@@ -670,20 +742,10 @@ function buildTotalStats() {
 
 function buildTree() {
     var tree;
-    tree = {
-        type: "App",
-        capsule: true,
-        children: {}
-    }
+    tree = {type: "App", children: {}}
     tree.children.practice = {
         type: "Practice",
-        capsule: true,
-        signals: {
-            onCompleted: {
-                target: "App",
-                type: "practice-completed"
-            }
-        }
+        channels: {app: "App"}
     }
     tree.children.mainMenu = {
         type: "MainMenu"
@@ -716,6 +778,69 @@ function createButton(parent, text, action) {
         action
     )
     return button
+}
+
+function createHeader(container, text) {
+    var header, headerDiv;
+    headerDiv = html.make(container, "div")
+    headerDiv.style.whiteSpace = "nowrap"
+    headerDiv.style.padding = "20px"
+    headerDiv.style.paddingTop = "40px"
+    header = html.addTag(
+        headerDiv,
+        "div",
+        text
+    )
+    header.style.fontSize = "20px"
+    header.style.fontWeight = "bold"
+}
+
+function createIcon(parent, src) {
+    var icon;
+    icon = html.make(parent, "img")
+    icon.draggable = false
+    icon.style.width = "40px"
+    icon.style.height = "40px"
+    icon.style.display = "inline-block"
+    icon.style.verticalAlign = "bottom"
+    icon.src = src
+    return icon
+}
+
+function createScreenButton(self, parent, text, type, isDefault) {
+    var button;
+    button = createButton(
+        parent,
+        text,
+        makeSend(self, {type: type})
+    )
+    if (isDefault) {
+        button.style.background = "#F39C12"
+    }
+}
+
+function createVerticalMid(parent) {
+    var mid;
+    mid = html.make(parent, "div")
+    mid.style.display = "inline-block"
+    mid.style.width = "100%"
+    mid.style.left = "0px"
+    mid.style.top = "50%"
+    mid.style.transform = "translateY(-50%)"
+    mid.style.position = "absolute"
+    return mid
+}
+
+function createViewport(main) {
+    var viewport;
+    viewport = html.make(main, "div")
+    viewport.style.maxWidth = "450px"
+    viewport.style.overflowY = "auto"
+    viewport.style.margin = "auto"
+    viewport.style.height = "100vh"
+    viewport.style.position = "relative"
+    viewport.style.background = "white"
+    return viewport
 }
 
 function flashDistract_onTimeout(self, data) {
@@ -812,6 +937,16 @@ function getRadioValue(name) {
     }
 }
 
+function getSelectObject() {
+    var value;
+    value = getRadioValue("object")
+    window.localStorage.setItem(
+        "last-object",
+        value
+    )
+    return value
+}
+
 function initStyles() {
     html.addStyle(
         ".wide-button",
@@ -850,10 +985,17 @@ function initStyles() {
             "left:0px",
             "width:100%",
             "height:calc(100% - 150px)",
-            "background:#F39C12",
+            "background:black",
             "color:black",
             "user-select:none",
             "cursor:pointer"
+        ]
+    )
+    html.addStyle(
+        ".view",
+        [
+            "padding-left:20px",
+            "padding-right:20px"
         ]
     )
     html.addStyle(
@@ -895,7 +1037,9 @@ function initStyles() {
             "background:white",
             "user-select:none",
             "cursor:pointer",
-            "padding:10px"
+            "padding-top:10px",
+            "padding-bottom:10px",
+            "border-bottom: solid 1px #aaaaaa"
         ]
     )
     html.addStyle(
@@ -917,29 +1061,25 @@ function initStyles() {
             "margin-bottom: 10px"
         ]
     )
+    html.addStyle(
+        ".back-red:hover, .back-red:active",
+        ["background: darkred"]
+    )
 }
 
 function makeSend(self, msg) {
     return function () {
-        sm.sendMessage(self, "onEvent", msg)
+        sendEvent(self, msg)
     }
 }
 
-function onStartPractice(self) {
-    var value;
-    value = getRadioValue("object")
-    window.localStorage.setItem(
-        "last-object",
-        value
-    )
-    console.log(value)
-    self.onEvent(
-        {type: "start", object: value}
-    )
+function sendEvent(target, msg) {
+    sm.sendMessage(target, "onEvent", msg)
 }
 
 function sendShow(app, view, data) {
     var msg;
+    html.clear(app.screen)
     msg = {
         type: "show",
         container: app.screen,
@@ -953,27 +1093,18 @@ function setUpScreen() {
     main = html.get("main")
     main.style.height = "100vh"
     main.style.background = "grey"
-    viewport = html.make(main, "div")
-    viewport.style.maxWidth = "350px"
-    viewport.style.maxWidth = "400px"
-    viewport.style.overflowY = "auto"
-    viewport.style.margin = "auto"
-    viewport.style.paddingLeft = "10px"
-    viewport.style.paddingRight = "10px"
-    viewport.style.height = "100vh"
-    viewport.style.position = "relative"
-    viewport.style.background = "white"
+    viewport = createViewport(main)
     return viewport
 }
 
 function showConcentrate(self) {
-    var big, headerDiv, message, stop;
+    var back, big, headerDiv, message, stop;
     function branch1() {
         html.clear(self.container)
-        headerDiv = html.make(
-            self.container,
-            "div"
-        )
+        back = html.make(self.container, "div")
+        back.style.background = "black"
+        back.style.height = "100vh"
+        headerDiv = html.make(back, "div")
         headerDiv.style.whiteSpace = "nowrap"
         headerDiv.style.padding = "20px"
         headerDiv.style.paddingTop = "40px"
@@ -990,7 +1121,7 @@ function showConcentrate(self) {
 
     function branch2() {
         big = html.addTag(
-            self.container,
+            back,
             "div",
             "",
             "big-button"
@@ -1001,6 +1132,7 @@ function showConcentrate(self) {
             "Отвлёкся? Нажми здесь",
             "mid"
         )
+        message.style.color = "#F39C12"
         html.addEventListener(
             big,
             "click",
@@ -1027,27 +1159,27 @@ function showConcentrate(self) {
 }
 
 function showPracticeStart(self) {
-    var header, headerDiv, last, object, practice;
-    html.clear(self.container)
-    headerDiv = html.make(
+    var last, object, view;
+    view = html.make(
         self.container,
-        "div"
-    )
-    headerDiv.style.whiteSpace = "nowrap"
-    headerDiv.style.padding = "20px"
-    headerDiv.style.paddingTop = "40px"
-    header = html.addTag(
-        headerDiv,
         "div",
+        "view"
+    )
+    createHeader(
+        view,
         "На чём концентрация?"
     )
-    header.style.fontSize = "20px"
-    header.style.fontWeight = "bold"
-    object = html.make(self.container, "div")
+    object = html.make(view, "div")
     addRadio(
         object,
         "object",
         "Ни на чём",
+        true
+    )
+    addRadio(
+        object,
+        "object",
+        "На пустоте",
         true
     )
     addRadio(object, "object", "На дыхании")
@@ -1073,19 +1205,115 @@ function showPracticeStart(self) {
     if (last) {
         html.get(last).checked = true
     }
-    practice = createButton(
-        self.container,
+    createScreenButton(
+        self,
+        view,
         "Начать",
-        function () {
-            onStartPractice(self)
-        }
+        "start",
+        true
     )
-    createButton(
-        self.container,
+    createScreenButton(
+        self,
+        view,
         "Отмена",
-        makeSend(self, {type: "cancel"})
+        "cancel",
+        false
     )
-    practice.style.background = "#F39C12"
+}
+
+function showYesNo_onEvent(self, data) {
+    switch (self.state) {
+        case "19_wait":
+            self.msg = data;
+            self.state = "22";
+            break;
+        default:
+            return;
+    }
+    showYesNo_run(self);
+}
+
+function showYesNo_run(self) {
+    var work = true;
+    while (work) {
+        switch (self.state) {
+            case "3":
+                self.main = html.get("main")
+                self.container = html.make(
+                    self.main,
+                    "div"
+                )
+                self.container.style.display = "inline-block"
+                self.container.style.position = "fixed"
+                self.container.style.left = "0px"
+                self.container.style.top = "0px"
+                self.container.style.width = "100vw"
+                self.container.style.height = "100vh"
+                self.container.style.background = "white"
+                self.container.style.zIndex = 10
+                self.viewport = createViewport(
+                    self.container
+                )
+                self.state = "15";
+                break;
+            case "15":
+                self.mid = createVerticalMid(
+                    self.viewport
+                )
+                self.qu = html.addTag(
+                    self.mid,
+                    "p",
+                    self.question
+                )
+                self.qu.style.margin = "40px"
+                createScreenButton(
+                    self,
+                    self.mid,
+                    self.yes,
+                    "yes",
+                    true
+                )
+                createScreenButton(
+                    self,
+                    self.mid,
+                    self.no,
+                    "cancel",
+                    false
+                )
+                self.state = "19";
+                break;
+            case "19":
+                self.state = "19_wait";
+                work = false;
+                break;
+            case "22":
+                html.removeElement(self.container)
+                if (self.msg.type === "yes") {
+                    self.state = undefined;
+                    sm.sendMessage(self.parent, "onChildCompleted", true);
+                    work = false;
+                } else {
+                    self.state = undefined;
+                    sm.sendMessage(self.parent, "onChildCompleted", false);
+                    work = false;
+                }
+                break;
+            default:
+                return;
+        }
+    }
+}
+
+function showYesNo(parent, question, yes, no) {
+    var self = sm.createMachine("showYesNo");
+    self.question = question;
+    self.yes = yes;
+    self.no = no;
+    sm.addMethod(self, "onEvent", showYesNo_onEvent);
+    sm.addChild(parent, self);
+    sm.addMethod(self, "run", showYesNo_run);
+    self.state = "3";
+    return self;
 }
 
 module.App = App;

@@ -98,32 +98,27 @@ function build(schema, factories) {
 }
 
 function buildAboveForNode(node) {
-    var _8_col, _8_it, _8_keys, _8_length, name, signalInfo, target;
-    if (node.signals) {
+    var _8_col, _8_it, _8_keys, _8_length, channels, propName, targetName;
+    if (node.channels) {
+        channels = {}
         _8_it = 0;
-        _8_col = node.signals;
+        _8_col = node.channels;
         _8_keys = Object.keys(_8_col);
         _8_length = _8_keys.length;
         while (true) {
             if (_8_it < _8_length) {
-                name = _8_keys[_8_it];
-                signalInfo = _8_col[name];
-                target = findNode(
+                propName = _8_keys[_8_it];
+                targetName = _8_col[propName];
+                channels[propName] = findNode(
                     node,
-                    signalInfo.target
-                )
-                addSignal(
-                    node,
-                    name,
-                    target,
-                    signalInfo.type
+                    targetName
                 )
                 _8_it++;
             } else {
                 break;
             }
         }
-        delete node.signals
+        node.channels = channels
     }
 }
 
@@ -154,8 +149,8 @@ function buildNode(schema, context, parent) {
     }
 
     function branch2() {
-        if (schema.signals) {
-            node.signals = schema.signals
+        if (schema.channels) {
+            node.channels = schema.channels
         }
         node.id = context.nextId.toString()
         context.nextId++
@@ -277,7 +272,7 @@ function findNodeBelow(node, target) {
 }
 
 function isNode(name, obj) {
-    if ((!(name === "parent")) && ((obj) && (obj.id))) {
+    if ((!((name === "parent") || (name === "channels"))) && ((obj) && (obj.id))) {
         return true
     } else {
         return false

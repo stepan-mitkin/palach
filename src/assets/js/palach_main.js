@@ -9,10 +9,7 @@ function addReport(report) {
     key = report.start
     list = getReportsList()
     list.push(key)
-    window.localStorage.setItem(
-        "reports",
-        JSON.stringify(list)
-    )
+    saveReportsList(list)
     window.localStorage.setItem(
         key,
         JSON.stringify(report)
@@ -49,9 +46,33 @@ function getReportsList() {
     return list
 }
 
+function removeReport(key) {
+    var index, reports;
+    reports = getReportsList()
+    index = reports.indexOf(key)
+    if (index == -1) {
+    } else {
+        reports.splice(index, 1)
+        saveReportsList(reports)
+        window.localStorage.setItem(
+            key,
+            undefined
+        )
+    }
+}
+
+function saveReportsList(reports) {
+    window.localStorage.setItem(
+        "reports",
+        JSON.stringify(reports)
+    )
+}
+
 module.addReport = addReport;
 
 module.getAllReports = getAllReports;
+
+module.removeReport = removeReport;
 
 return module;
 
